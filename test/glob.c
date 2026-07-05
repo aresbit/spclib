@@ -947,6 +947,17 @@ UTEST_F(glob, set_recursive_extension) {
   sp_glob_set_free(set);
 }
 
+UTEST_F(glob, set_multi_dot_extension) {
+  sp_glob_set_t* set = sp_glob_set_new(ut.mem.tracking);
+  sp_glob_set_add(set, "*.tar.gz");
+  sp_glob_set_build(set);
+
+  EXPECT_TRUE(sp_glob_set_match(set, sp_str_lit("foo.tar.gz")));
+  EXPECT_FALSE(sp_glob_set_match(set, sp_str_lit("foo.star.gz")));
+
+  sp_glob_set_free(set);
+}
+
 UTEST_F(glob, set_duplicate_extension) {
   sp_glob_set_t* set = sp_glob_set_new(ut.mem.tracking);
   sp_glob_set_add(set, "*.c");
@@ -1062,6 +1073,14 @@ UTEST_F(glob, match_extension_multiple_dots) {
     .pattern = "*.txt",
     .path = sp_str_lit("foo.bar.txt"),
     .expected = true
+  });
+}
+
+UTEST_F(glob, match_extension_requires_dot) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
+    .pattern = "**/*.h",
+    .path = sp_str_lit("dump.sh"),
+    .expected = false
   });
 }
 

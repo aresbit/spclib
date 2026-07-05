@@ -534,7 +534,8 @@ sp_glob_t* sp_glob_new_str(sp_mem_t mem, sp_str_t pattern) {
       break;
     }
     case SP_GLOB_STRATEGY_EXTENSION: {
-      g->literal = sp_str_cleave_c8(pattern, '.').second;
+      sp_str_t before = sp_str_cleave_c8(pattern, '.').first;
+      g->literal = sp_str_suffix(pattern, pattern.len - before.len);
       break;
     }
     case SP_GLOB_STRATEGY_PREFIX: {
@@ -666,7 +667,17 @@ void sp_glob_set_build(sp_glob_set_t* set) {
         break;
       }
       case SP_GLOB_STRATEGY_EXTENSION: {
-        sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->extension, g->literal, idx);
+        sp_str_t ext = sp_str_suffix(g->literal, g->literal.len - 1);
+        if (sp_str_find_c8(ext, '.') >= 0) {
+          sp_da_push(set->suffixes, ((sp_glob_set_suffix_entry_t) {
+            .suffix = g->literal,
+            .idx = idx,
+            .component = false
+          }));
+        }
+        else {
+          sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->extension, ext, idx);
+        }
         break;
       }
       case SP_GLOB_STRATEGY_PREFIX: {
