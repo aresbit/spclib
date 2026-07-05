@@ -10003,7 +10003,7 @@ void sp_os_qsort(void *arr, u64 len, u64 stride, sp_qsort_fn_t cmp) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   u8* tmp = sp_alloc_n(s.mem, u8, stride);
 
-  for (gap = len / 3; gap > 0; gap /= 3 + 1) {
+  for (gap = len / 2; gap > 0; gap /= 2) {
     for (i = gap; i < len; i++) {
       sp_sys_memcpy(tmp, a + i * stride, stride);
       for (j = i; j >= gap && cmp(a + (j - gap) * stride, tmp) > 0; j -= gap) {

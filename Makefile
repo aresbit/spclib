@@ -48,7 +48,7 @@ CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -f
 CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -DSP_CLI_TEST_DIR='"$(CURDIR)/test/cli"' -DSP_GDB_TOOLS_DIR='"$(CURDIR)/tools/gdb"' -I. -Itest/tools -Itest
 CFLAGS_BENCH = $(CFLAGS_LANG) -g -Werror=return-type -O2 -DSP_IMPLEMENTATION -DUBENCH_ENABLE_PERF_COUNTERS -I. -Itest/bench -Itest/tools
 
-TESTS = amalg app array asset cli etc cv env format fmon fs gdb gdb_fixture glob ht io math process ps rb str thread time mem prompt leak
+TESTS = amalg app array asset cli etc cv env format fmon fs gdb gdb_fixture glob ht io math process ps rb str thread time mem prompt leak qsort
 BENCHES = glob heap
 EXAMPLES = app array cli format hash_table io zero_copy ls palette prompt prompt_fancy signal wc
 TRIPLES = \
