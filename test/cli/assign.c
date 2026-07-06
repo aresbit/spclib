@@ -4,11 +4,14 @@ typedef union {
   bool b;
   s64 i;
   const c8* s;
+  sp_str_t v;
 } cli_assign_slot_t;
 
 typedef struct {
   sp_cli_err_kind_t err;
   const c8* err_value;
+  const c8* cstr;
+  bool cstr_null;
   const c8* str;
   bool str_null;
   s64 num;
@@ -37,34 +40,57 @@ static void run_cli_assign_test(s32* utest_result, cli_assign_test_t t) {
   }
 
   switch (t.kind) {
-    case SP_CLI_OPT_STRING:
-      if (t.expect.str_null) EXPECT_EQ(SP_NULLPTR, (void*)slot.s);
-      else SP_EXPECT_STR_EQ_CSTR(sp_cstr_as_str(slot.s), t.expect.str ? t.expect.str : "");
+    case SP_CLI_OPT_CSTR:
+      if (t.expect.cstr_null) EXPECT_EQ(SP_NULLPTR, (void*)slot.s);
+      else SP_EXPECT_STR_EQ_CSTR(sp_cstr_as_str(slot.s), t.expect.cstr ? t.expect.cstr : "");
+      break;
+    case SP_CLI_OPT_STR:
+      if (t.expect.str_null) {
+        EXPECT_EQ(SP_NULLPTR, (void*)slot.v.data);
+        EXPECT_EQ(0u, slot.v.len);
+      }
+      else SP_EXPECT_STR_EQ_CSTR(slot.v, t.expect.str ? t.expect.str : "");
       break;
     case SP_CLI_OPT_INTEGER: EXPECT_EQ(t.expect.num, slot.i); break;
     case SP_CLI_OPT_BOOLEAN: EXPECT_EQ(t.expect.flag, slot.b); break;
   }
 }
 
-UTEST_F(cli_assign, string) {
+UTEST_F(cli_assign, cstr) {
   run_cli_assign_test(&ur, (cli_assign_test_t) {
-    .kind = SP_CLI_OPT_STRING,
+    .kind = SP_CLI_OPT_CSTR,
+    .value = "hello",
+    .expect = { .cstr = "hello" },
+  });
+}
+
+UTEST_F(cli_assign, cstr_empty) {
+  run_cli_assign_test(&ur, (cli_assign_test_t) {
+    .kind = SP_CLI_OPT_CSTR,
+    .value = "",
+    .expect = { .cstr = "" },
+  });
+}
+
+UTEST_F(cli_assign, cstr_null_value) {
+  run_cli_assign_test(&ur, (cli_assign_test_t) {
+    .kind = SP_CLI_OPT_CSTR,
+    .null_value = true,
+    .expect = { .cstr_null = true },
+  });
+}
+
+UTEST_F(cli_assign, str) {
+  run_cli_assign_test(&ur, (cli_assign_test_t) {
+    .kind = SP_CLI_OPT_STR,
     .value = "hello",
     .expect = { .str = "hello" },
   });
 }
 
-UTEST_F(cli_assign, string_empty) {
+UTEST_F(cli_assign, str_null_value) {
   run_cli_assign_test(&ur, (cli_assign_test_t) {
-    .kind = SP_CLI_OPT_STRING,
-    .value = "",
-    .expect = { .str = "" },
-  });
-}
-
-UTEST_F(cli_assign, string_null_value) {
-  run_cli_assign_test(&ur, (cli_assign_test_t) {
-    .kind = SP_CLI_OPT_STRING,
+    .kind = SP_CLI_OPT_STR,
     .null_value = true,
     .expect = { .str_null = true },
   });

@@ -21,7 +21,7 @@ typedef struct {
   bool color;
   struct {
     const c8* package;
-    const c8* version;
+    sp_str_t version;
     bool force;
   } add;
   struct {
@@ -36,11 +36,12 @@ typedef struct {
 //////////////
 sp_cli_result_t pkg_add(sp_cli_t* cli) {
   pkg_t* pkg = sp_cast(pkg_t*, cli->user_data);
+  sp_str_t version = sp_str_empty(pkg->add.version) ? sp_str_lit("latest") : pkg->add.version;
   if (pkg->verbose) sp_log("PKG_HOME={.gray}", sp_fmt_cstr(pkg->home));
   if (pkg->add.force) {
-    sp_log("Adding {.cyan} {.yellow} to project", sp_fmt_cstr(pkg->add.package), sp_fmt_cstr(pkg->add.version));
+    sp_log("Adding {.cyan} {.yellow} to project", sp_fmt_cstr(pkg->add.package), sp_fmt_str(version));
   } else {
-    sp_log("Force reinstalling {.cyan} {.yellow} to project", sp_fmt_cstr(pkg->add.package), sp_fmt_cstr(pkg->add.version));
+    sp_log("Force reinstalling {.cyan} {.yellow} to project", sp_fmt_cstr(pkg->add.package), sp_fmt_str(version));
   }
   return SP_CLI_OK;
 }
@@ -110,7 +111,7 @@ s32 run(s32 num_args, const c8** args) {
         },
         {
           .name = "args",
-          .kind = SP_CLI_ARG_REST,
+          .arity = SP_CLI_ARG_REST,
           .summary = "Arguments passed to the binary",
         },
       },
@@ -130,6 +131,7 @@ s32 run(s32 num_args, const c8** args) {
         {
           .brief = "f",
           .name = "force",
+          .kind = SP_CLI_OPT_BOOLEAN,
           .summary = "Force reinstall even if already installed",
           .ptr = &pkg.add.force,
         },
@@ -142,7 +144,8 @@ s32 run(s32 num_args, const c8** args) {
         },
         {
           .name = "version",
-          .kind = SP_CLI_ARG_OPTIONAL,
+          .arity = SP_CLI_ARG_OPTIONAL,
+          .kind = SP_CLI_OPT_STR,
           .summary = "Version to add",
           .ptr = &pkg.add.version,
         },
@@ -163,7 +166,6 @@ s32 run(s32 num_args, const c8** args) {
         },
         {
           .name = "target",
-          .kind = SP_CLI_OPT_STRING,
           .summary = "Build only the named target",
           .placeholder = "NAME",
           .ptr = &pkg.build.target,
@@ -180,6 +182,7 @@ s32 run(s32 num_args, const c8** args) {
       {
         .brief = "v",
         .name = "verbose",
+        .kind = SP_CLI_OPT_BOOLEAN,
         .summary = "Show verbose output",
         .ptr = &pkg.verbose,
       },
@@ -187,7 +190,6 @@ s32 run(s32 num_args, const c8** args) {
     .env = {
       {
         .name = "PKG_HOME",
-        .kind = SP_CLI_OPT_STRING,
         .summary = "Where packages are installed",
         .ptr = &pkg.home,
       .required = true

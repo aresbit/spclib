@@ -31,11 +31,12 @@ typedef enum {
   SP_CLI_ARG_REQUIRED,
   SP_CLI_ARG_OPTIONAL,
   SP_CLI_ARG_REST,
-} sp_cli_arg_kind_t;
+} sp_cli_arg_arity_t;
 
 typedef enum {
+  SP_CLI_OPT_CSTR,
+  SP_CLI_OPT_STR,
   SP_CLI_OPT_BOOLEAN,
-  SP_CLI_OPT_STRING,
   SP_CLI_OPT_INTEGER,
 } sp_cli_value_kind_t;
 
@@ -59,6 +60,7 @@ typedef enum {
   SP_CLI_ERR_INVALID_VALUE,
   SP_CLI_ERR_MISSING_VALUE,
   SP_CLI_ERR_MISSING_ARG,
+  SP_CLI_ERR_INVALID_ARG,
   SP_CLI_ERR_UNEXPECTED_ARG,
   SP_CLI_ERR_UNKNOWN_COMMAND,
   SP_CLI_ERR_MISSING_ENV,
@@ -78,9 +80,10 @@ SP_TYPEDEF_FN(sp_cli_result_t, sp_cli_handler_t, sp_cli_t*);
 
 typedef struct {
   const c8* name;
-  sp_cli_arg_kind_t kind;
+  sp_cli_arg_arity_t arity;
+  sp_cli_value_kind_t kind;
   const c8* summary;
-  const c8** ptr;
+  void* ptr;
 } sp_cli_arg_t;
 
 typedef struct {
@@ -157,7 +160,7 @@ struct sp_cli {
   sp_cli_theme_t theme;
 };
 
-SP_API sp_str_t        sp_cli_arg_kind_to_str(sp_cli_arg_kind_t kind);
+SP_API sp_str_t        sp_cli_arg_arity_to_str(sp_cli_arg_arity_t arity);
 SP_API sp_str_t        sp_cli_opt_kind_to_str(sp_cli_value_kind_t kind);
 SP_API sp_str_t        sp_cli_result_to_str(sp_cli_result_t result);
 SP_API sp_str_t        sp_cli_err_kind_to_str(sp_cli_err_kind_t kind);
@@ -203,7 +206,7 @@ SP_PRIVATE u32 sp_cli_num_fixed_args(sp_cli_cmd_t* cmd) {
   u32 num = 0;
   sp_carr_for(cmd->args, it) {
     if (!cmd->args[it].name) break;
-    if (cmd->args[it].kind == SP_CLI_ARG_REST) break;
+    if (cmd->args[it].arity == SP_CLI_ARG_REST) break;
     num++;
   }
   return num;
@@ -216,7 +219,7 @@ SP_PRIVATE bool sp_cli_has_commands(sp_cli_cmd_t* cmd) {
 SP_PRIVATE bool sp_cli_has_rest(sp_cli_cmd_t* cmd) {
   sp_carr_for(cmd->args, it) {
     if (!cmd->args[it].name) break;
-    if (cmd->args[it].kind == SP_CLI_ARG_REST) return true;
+    if (cmd->args[it].arity == SP_CLI_ARG_REST) return true;
   }
   return false;
 }
@@ -263,20 +266,24 @@ SP_PRIVATE sp_cli_opt_t* sp_cli_find_brief(sp_cli_scope_t* scope, c8 brief) {
 
 SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_str_t value) {
   switch (kind) {
+    case SP_CLI_OPT_CSTR: {
+      // Every value is either a whole element of desc.args or a NUL-terminated
+      // tail of one (the text after '=' or after a brief cluster), so cstr
+      // bindings borrow the args array directly instead of copying. A null value
+      // passes through as a null pointer, signalling "not set".
+      if (ptr) *sp_cast(const c8**, ptr) = value.data;
+      break;
+    }
+    case SP_CLI_OPT_STR: {
+      if (ptr) *sp_cast(sp_str_t*, ptr) = value;
+      break;
+    }
     case SP_CLI_OPT_BOOLEAN: {
       bool parsed = true;
       if (!sp_str_empty(value) && !sp_parse_bool_ex(value, &parsed)) {
         return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
       }
       if (ptr) *sp_cast(bool*, ptr) = parsed;
-      break;
-    }
-    case SP_CLI_OPT_STRING: {
-      // Every value is either a whole element of desc.args or a NUL-terminated
-      // tail of one (the text after '=' or after a brief cluster), so string
-      // options borrow the args array directly instead of copying. A null value
-      // passes through as a null pointer, signalling "not set".
-      if (ptr) *sp_cast(const c8**, ptr) = value.data;
       break;
     }
     case SP_CLI_OPT_INTEGER: {
@@ -439,9 +446,14 @@ SP_PRIVATE sp_err_t sp_cli_parse_cmd(sp_cli_parser_t* parser, sp_cli_scope_t sco
     if (!arg->name) break;
 
     if (it < parser->num_positionals) {
-      if (arg->ptr) *arg->ptr = parser->positionals[it];
+      sp_cli_err_t err = sp_cli_assign(arg->kind, arg->ptr, sp_cstr_as_str(parser->positionals[it]));
+      if (err.kind != SP_CLI_ERR_NONE) {
+        err.kind = SP_CLI_ERR_INVALID_ARG;
+        err.name = sp_cstr_as_str(arg->name);
+        return sp_cli_fail(cli, err);
+      }
     }
-    else if (arg->kind == SP_CLI_ARG_REQUIRED) {
+    else if (arg->arity == SP_CLI_ARG_REQUIRED) {
       return sp_cli_fail(cli, (sp_cli_err_t) {
         .kind = SP_CLI_ERR_MISSING_ARG,
         .name = sp_cstr_as_str(arg->name),
@@ -492,7 +504,7 @@ SP_PRIVATE sp_str_t sp_cli_arg_label(c8* buf, u32 len, sp_cli_arg_t* arg) {
   sp_io_mem_writer_t label = sp_zero;
   sp_io_mem_writer_from_buffer(&label, buf, len);
 
-  switch (arg->kind) {
+  switch (arg->arity) {
     case SP_CLI_ARG_REQUIRED: {
       sp_fmt_io(&label.base, "{}", sp_fmt_cstr(arg->name));
       break;
@@ -510,8 +522,8 @@ SP_PRIVATE sp_str_t sp_cli_arg_label(c8* buf, u32 len, sp_cli_arg_t* arg) {
   return sp_io_mem_writer_as_str(&label);
 }
 
-sp_str_t sp_cli_arg_kind_to_str(sp_cli_arg_kind_t kind) {
-  switch (kind) {
+sp_str_t sp_cli_arg_arity_to_str(sp_cli_arg_arity_t arity) {
+  switch (arity) {
     case SP_CLI_ARG_REQUIRED: { return sp_str_lit("required"); }
     case SP_CLI_ARG_OPTIONAL: { return sp_str_lit("optional"); }
     case SP_CLI_ARG_REST:     { return sp_str_lit("rest"); }
@@ -521,8 +533,9 @@ sp_str_t sp_cli_arg_kind_to_str(sp_cli_arg_kind_t kind) {
 
 sp_str_t sp_cli_opt_kind_to_str(sp_cli_value_kind_t kind) {
   switch (kind) {
+    case SP_CLI_OPT_CSTR:    { return sp_str_lit("cstr"); }
+    case SP_CLI_OPT_STR:     { return sp_str_lit("str"); }
     case SP_CLI_OPT_BOOLEAN: { return sp_str_lit("boolean"); }
-    case SP_CLI_OPT_STRING:  { return sp_str_lit("string"); }
     case SP_CLI_OPT_INTEGER: { return sp_str_lit("integer"); }
   }
   SP_UNREACHABLE_RETURN(sp_str_lit(""));
@@ -547,6 +560,7 @@ sp_str_t sp_cli_err_kind_to_str(sp_cli_err_kind_t kind) {
     case SP_CLI_ERR_INVALID_VALUE:   { return sp_str_lit("invalid_value"); }
     case SP_CLI_ERR_MISSING_VALUE:   { return sp_str_lit("missing_value"); }
     case SP_CLI_ERR_MISSING_ARG:     { return sp_str_lit("missing_arg"); }
+    case SP_CLI_ERR_INVALID_ARG:     { return sp_str_lit("invalid_arg"); }
     case SP_CLI_ERR_UNEXPECTED_ARG:  { return sp_str_lit("unexpected_arg"); }
     case SP_CLI_ERR_UNKNOWN_COMMAND: { return sp_str_lit("unknown_command"); }
     case SP_CLI_ERR_MISSING_ENV:     { return sp_str_lit("missing_env"); }
@@ -689,6 +703,10 @@ void sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err) {
     }
     case SP_CLI_ERR_MISSING_ARG: {
       sp_fmt_io(io, "missing required argument: {}", sp_fmt_str(err.name));
+      break;
+    }
+    case SP_CLI_ERR_INVALID_ARG: {
+      sp_fmt_io(io, "invalid value for argument {}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
       break;
     }
     case SP_CLI_ERR_UNEXPECTED_ARG: {
@@ -865,7 +883,7 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
       c8 buffer [SP_CLI_MAX_LABEL];
       sp_cli_arg_t* arg = view.args[it];
       sp_str_t label = sp_cli_arg_label(buffer, SP_CLI_MAX_LABEL, arg);
-      sp_cli_write_label_opt(io, theme.label, theme.hint, label, sp_cstr_as_str(arg->summary ? arg->summary : ""), width, arg->kind == SP_CLI_ARG_REQUIRED);
+      sp_cli_write_label_opt(io, theme.label, theme.hint, label, sp_cstr_as_str(arg->summary ? arg->summary : ""), width, arg->arity == SP_CLI_ARG_REQUIRED);
     }
   }
 

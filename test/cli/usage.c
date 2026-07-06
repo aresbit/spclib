@@ -149,7 +149,7 @@ UTEST_F(cli_usage, argument_optional) {
     .cmd = {
       .name = "test",
       .args = {
-        { .name = "file", .kind = SP_CLI_ARG_OPTIONAL, .summary = "The file to read" },
+        { .name = "file", .arity = SP_CLI_ARG_OPTIONAL, .summary = "The file to read" },
       },
     },
   });
@@ -162,7 +162,7 @@ UTEST_F(cli_usage, argument_rest) {
     .cmd = {
       .name = "test",
       .args = {
-        { .name = "files", .kind = SP_CLI_ARG_REST, .summary = "Files to read" },
+        { .name = "files", .arity = SP_CLI_ARG_REST, .summary = "Files to read" },
       },
     },
   });
@@ -254,7 +254,7 @@ UTEST_F(cli_usage, everything) {
       },
       .args = {
         { .name = "target", .summary = "The target" },
-        { .name = "extra", .kind = SP_CLI_ARG_REST, .summary = "Passed through" },
+        { .name = "extra", .arity = SP_CLI_ARG_REST, .summary = "Passed through" },
       },
       .env = {
         { .name = "PKG_HOME", .summary = "Install root", .required = true },
