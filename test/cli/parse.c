@@ -358,7 +358,7 @@ UTEST_F(cli_parse, int_opt) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_INTEGER, .ptr = &cli_binds.nums[0] },
+        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {
@@ -373,7 +373,7 @@ UTEST_F(cli_parse, int_opt_negative_eq) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_INTEGER, .ptr = &cli_binds.nums[0] },
+        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {
@@ -388,7 +388,7 @@ UTEST_F(cli_parse, int_opt_invalid) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_INTEGER, .ptr = &cli_binds.nums[0] },
+        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {
@@ -1052,7 +1052,7 @@ UTEST_F(cli_parse, int_arg) {
     .cmd = {
       .name = "test",
       .args = {
-        { .name = "jobs", .kind = SP_CLI_OPT_INTEGER, .ptr = &cli_binds.nums[0] },
+        { .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {
@@ -1070,7 +1070,7 @@ UTEST_F(cli_parse, int_arg_invalid) {
     .cmd = {
       .name = "test",
       .args = {
-        { .name = "jobs", .kind = SP_CLI_OPT_INTEGER, .ptr = &cli_binds.nums[0] },
+        { .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {

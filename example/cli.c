@@ -26,7 +26,7 @@ typedef struct {
   } add;
   struct {
     const c8* target;
-    s64 jobs;
+    u32 jobs;
   } build;
   const c8* tool;
 } pkg_t;
@@ -54,7 +54,7 @@ sp_cli_result_t pkg_build(sp_cli_t* cli) {
 
   const c8* target = pkg->build.target ? pkg->build.target : "all";
   if (pkg->verbose) sp_log("PKG_HOME={.gray}", sp_fmt_cstr(pkg->home));
-  sp_log("Building {.cyan} with {.yellow} jobs", sp_fmt_cstr(target), sp_fmt_int(pkg->build.jobs));
+  sp_log("Building {.cyan} with {.yellow} jobs", sp_fmt_cstr(target), sp_fmt_uint(pkg->build.jobs));
   return SP_CLI_OK;
 }
 
@@ -159,7 +159,7 @@ s32 run(s32 num_args, const c8** args) {
         {
           .brief = "j",
           .name = "jobs",
-          .kind = SP_CLI_OPT_INTEGER,
+          .kind = SP_CLI_OPT_U32,
           .summary = "Number of parallel jobs",
           .placeholder = "N",
           .ptr = &pkg.build.jobs,

@@ -37,7 +37,14 @@ typedef enum {
   SP_CLI_OPT_CSTR,
   SP_CLI_OPT_STR,
   SP_CLI_OPT_BOOLEAN,
-  SP_CLI_OPT_INTEGER,
+  SP_CLI_OPT_S8,
+  SP_CLI_OPT_S16,
+  SP_CLI_OPT_S32,
+  SP_CLI_OPT_S64,
+  SP_CLI_OPT_U8,
+  SP_CLI_OPT_U16,
+  SP_CLI_OPT_U32,
+  SP_CLI_OPT_U64,
 } sp_cli_value_kind_t;
 
 typedef enum {
@@ -264,6 +271,16 @@ SP_PRIVATE sp_cli_opt_t* sp_cli_find_brief(sp_cli_scope_t* scope, c8 brief) {
   return SP_NULLPTR;
 }
 
+#define SP_CLI_ASSIGN_NUM(KIND, T) \
+  case KIND: { \
+    T parsed = 0; \
+    if (!sp_parse_##T##_ex(value, &parsed)) { \
+      return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value }; \
+    } \
+    if (ptr) *sp_cast(T*, ptr) = parsed; \
+    break; \
+  }
+
 SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_str_t value) {
   switch (kind) {
     case SP_CLI_OPT_CSTR: {
@@ -286,14 +303,14 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
       if (ptr) *sp_cast(bool*, ptr) = parsed;
       break;
     }
-    case SP_CLI_OPT_INTEGER: {
-      s64 parsed = 0;
-      if (!sp_parse_s64_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
-      }
-      if (ptr) *sp_cast(s64*, ptr) = parsed;
-      break;
-    }
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_S8,  s8)
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_S16, s16)
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_S32, s32)
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_S64, s64)
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_U8,  u8)
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_U16, u16)
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_U32, u32)
+    SP_CLI_ASSIGN_NUM(SP_CLI_OPT_U64, u64)
   }
   return sp_zero_s(sp_cli_err_t);
 }
@@ -536,7 +553,14 @@ sp_str_t sp_cli_opt_kind_to_str(sp_cli_value_kind_t kind) {
     case SP_CLI_OPT_CSTR:    { return sp_str_lit("cstr"); }
     case SP_CLI_OPT_STR:     { return sp_str_lit("str"); }
     case SP_CLI_OPT_BOOLEAN: { return sp_str_lit("boolean"); }
-    case SP_CLI_OPT_INTEGER: { return sp_str_lit("integer"); }
+    case SP_CLI_OPT_S8:      { return sp_str_lit("s8"); }
+    case SP_CLI_OPT_S16:     { return sp_str_lit("s16"); }
+    case SP_CLI_OPT_S32:     { return sp_str_lit("s32"); }
+    case SP_CLI_OPT_S64:     { return sp_str_lit("s64"); }
+    case SP_CLI_OPT_U8:      { return sp_str_lit("u8"); }
+    case SP_CLI_OPT_U16:     { return sp_str_lit("u16"); }
+    case SP_CLI_OPT_U32:     { return sp_str_lit("u32"); }
+    case SP_CLI_OPT_U64:     { return sp_str_lit("u64"); }
   }
   SP_UNREACHABLE_RETURN(sp_str_lit(""));
 }
