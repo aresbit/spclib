@@ -11358,62 +11358,65 @@ void sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
   }
 }
 
-void sp_ps_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_stdio_config_entry_t* p) {
+bool sp_ps_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_stdio_config_entry_t* p) {
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
-      SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0);
-      break;
+      return posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0;
     }
     case SP_PS_IO_MODE_CREATE: {
       s32 pipes [2] = { -1, -1 };
-      SP_ASSERT(sp_ps_create_pipes(pipes));
+      if (!sp_ps_create_pipes(pipes)) {
+        return false;
+      }
       p->pipes.read = pipes[0];
       p->pipes.write = pipes[1];
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, p->pipes.read, p->file_number) == 0);
-      break;
+      return posix_spawn_file_actions_adddup2(p->fa, p->pipes.read, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_EXISTING: {
-      SP_ASSERT(io->fd);
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0);
-      break;
+      if (!io->fd) {
+        return false;
+      }
+      return posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_REDIRECT: {
-      break;
+      return true;
     }
     case SP_PS_IO_MODE_INHERIT: {
-      break;
+      return true;
     }
   }
+  SP_UNREACHABLE_RETURN(false);
 }
 
-void sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_t* p) {
+bool sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_t* p) {
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
-      SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0);
-      break;
+      return posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0;
     }
     case SP_PS_IO_MODE_CREATE: {
       s32 pipes [2] = { -1, -1 };
-      SP_ASSERT(sp_ps_create_pipes(pipes));
+      if (!sp_ps_create_pipes(pipes)) {
+        return false;
+      }
       p->pipes.read = pipes[0];
       p->pipes.write = pipes[1];
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, p->pipes.write, p->file_number) == 0);
-      break;
+      return posix_spawn_file_actions_adddup2(p->fa, p->pipes.write, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_EXISTING: {
-      SP_ASSERT(io->fd);
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0);
-      break;
+      if (!io->fd) {
+        return false;
+      }
+      return posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_REDIRECT: {
       s32 redirect = p->file_number == SP_PS_IO_FILENO_STDOUT ? SP_PS_IO_FILENO_STDERR : SP_PS_IO_FILENO_STDOUT;
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, redirect, p->file_number) == 0);
-      break;
+      return posix_spawn_file_actions_adddup2(p->fa, redirect, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_INHERIT: {
-      break;
+      return true;
     }
   }
+  SP_UNREACHABLE_RETURN(false);
 }
 
 c8** sp_env_to_posix_envp(sp_mem_t mem, sp_env_t* env) {
@@ -11482,19 +11485,19 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
     },
   };
 
-  sp_ps_configure_io_in(&proc.io.in, &io.in);
+  bool io_ok = sp_ps_configure_io_in(&proc.io.in, &io.in);
 
   if (proc.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
-    sp_ps_configure_io_out(&proc.io.err, &io.err);
-    sp_ps_configure_io_out(&proc.io.out, &io.out);
+    io_ok = io_ok && sp_ps_configure_io_out(&proc.io.err, &io.err);
+    io_ok = io_ok && sp_ps_configure_io_out(&proc.io.out, &io.out);
   }
   else {
-    sp_ps_configure_io_out(&proc.io.out, &io.out);
-    sp_ps_configure_io_out(&proc.io.err, &io.err);
+    io_ok = io_ok && sp_ps_configure_io_out(&proc.io.out, &io.out);
+    io_ok = io_ok && sp_ps_configure_io_out(&proc.io.err, &io.err);
   }
 
   pid_t pid;
-  s32 spawn_result = posix_spawnp(&pid, argv[0], &fa, &attr, argv, envp);
+  s32 spawn_result = io_ok ? posix_spawnp(&pid, argv[0], &fa, &attr, argv, envp) : -1;
   sp_mem_end_scratch(scratch);
 
   if (spawn_result != 0) {
@@ -11555,7 +11558,11 @@ sp_ps_output_t sp_ps_run(sp_mem_t mem, sp_ps_config_t config) {
     .mode = SP_PS_IO_MODE_CREATE
   };
   sp_ps_t ps = sp_ps_create(mem, config);
-  if (ps.os) return sp_ps_output(&ps);
+  if (ps.os) {
+    sp_ps_output_t output = sp_ps_output(&ps);
+    sp_ps_free(&ps);
+    return output;
+  }
   return (sp_ps_output_t) { .status = { .state = SP_PS_STATE_DONE, .exit_code = -1 } };
 }
 
@@ -11584,12 +11591,22 @@ sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode) {
   SP_UNREACHABLE_RETURN(SP_IO_CLOSE_MODE_NONE);
 }
 
+SP_PRIVATE void sp_ps_close_owned_fd(sp_sys_fd_t* fd, sp_ps_io_mode_t mode) {
+  if (sp_ps_io_close_mode(mode) != SP_IO_CLOSE_MODE_AUTO) return;
+  if (!sp_ps_is_fd_valid(*fd)) return;
+  sp_sys_close(*fd);
+  *fd = 0;
+}
+
 sp_io_stream_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.in.fd)) return SP_NULLPTR;
 
   sp_io_stream_writer_t* writer = sp_alloc_type(ps->mem, sp_io_stream_writer_t);
   sp_io_stream_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
+  if (sp_ps_io_close_mode(ps->io.in.mode) == SP_IO_CLOSE_MODE_AUTO) {
+    ps->io.in.fd = 0;
+  }
   return writer;
 }
 
@@ -11598,7 +11615,7 @@ sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
   sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
+  sp_io_stream_reader_from_fd(reader, ps->io.out.fd, SP_IO_CLOSE_MODE_NONE);
   return &reader->base;
 }
 
@@ -11607,7 +11624,7 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
   sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
+  sp_io_stream_reader_from_fd(reader, ps->io.err.fd, SP_IO_CLOSE_MODE_NONE);
   return &reader->base;
 }
 
@@ -11714,6 +11731,8 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   sp_ps_output_t result = sp_zero;
   u8 buffer[4096];
 
+  sp_ps_close_owned_fd(&ps->io.in.fd, ps->io.in.mode);
+
   struct {
     sp_io_reader_t* out;
     sp_io_reader_t* err;
@@ -11772,6 +11791,9 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
     }
   }
 
+  sp_ps_close_owned_fd(&ps->io.out.fd, ps->io.out.mode);
+  sp_ps_close_owned_fd(&ps->io.err.fd, ps->io.err.mode);
+
   result.out = sp_io_dyn_mem_writer_take_str(&write.out);
   result.err = sp_io_dyn_mem_writer_take_str(&write.err);
   result.status = sp_ps_wait(ps);
@@ -11786,7 +11808,13 @@ bool sp_ps_kill(sp_ps_t* ps) {
 }
 
 void sp_ps_free(sp_ps_t* ps) {
-  if (!ps || !ps->os) return;
+  if (!ps) return;
+
+  sp_ps_close_owned_fd(&ps->io.in.fd, ps->io.in.mode);
+  sp_ps_close_owned_fd(&ps->io.out.fd, ps->io.out.mode);
+  sp_ps_close_owned_fd(&ps->io.err.fd, ps->io.err.mode);
+
+  if (!ps->os) return;
   sp_free(ps->mem, ps->os, sizeof(*ps->os));
   ps->os = SP_NULLPTR;
 }
@@ -11822,6 +11850,13 @@ sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode) {
     }
   }
   SP_UNREACHABLE_RETURN(SP_IO_CLOSE_MODE_NONE);
+}
+
+SP_PRIVATE void sp_ps_close_owned_fd(sp_sys_fd_t* fd, sp_ps_io_mode_t mode) {
+  if (sp_ps_io_close_mode(mode) != SP_IO_CLOSE_MODE_AUTO) return;
+  if (!sp_ps_is_fd_valid(*fd)) return;
+  sp_sys_close(*fd);
+  *fd = SP_SYS_INVALID_FD;
 }
 
 void sp_ps_win32_append_quoted_arg(sp_io_writer_t* builder, sp_str_t arg) {
@@ -12230,7 +12265,11 @@ sp_ps_output_t sp_ps_run(sp_mem_t mem, sp_ps_config_t config) {
     .mode = SP_PS_IO_MODE_CREATE,
   };
   sp_ps_t ps = sp_ps_create(mem, config);
-  if (ps.os) return sp_ps_output(&ps);
+  if (ps.os) {
+    sp_ps_output_t output = sp_ps_output(&ps);
+    sp_ps_free(&ps);
+    return output;
+  }
   return (sp_ps_output_t) { .status = { .state = SP_PS_STATE_DONE, .exit_code = -1 } };
 }
 
@@ -12240,6 +12279,9 @@ sp_io_stream_writer_t* sp_ps_io_in(sp_ps_t* ps) {
 
   sp_io_stream_writer_t* writer = sp_alloc_type(ps->mem, sp_io_stream_writer_t);
   sp_io_stream_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
+  if (sp_ps_io_close_mode(ps->io.in.mode) == SP_IO_CLOSE_MODE_AUTO) {
+    ps->io.in.fd = SP_SYS_INVALID_FD;
+  }
   return writer;
 }
 
@@ -12248,7 +12290,7 @@ sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
   sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
+  sp_io_stream_reader_from_fd(reader, ps->io.out.fd, SP_IO_CLOSE_MODE_NONE);
   return &reader->base;
 }
 
@@ -12257,7 +12299,7 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
   sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
+  sp_io_stream_reader_from_fd(reader, ps->io.err.fd, SP_IO_CLOSE_MODE_NONE);
   return &reader->base;
 }
 
@@ -12360,6 +12402,8 @@ u64 sp_ps_win32_read_available(sp_sys_fd_t fd, sp_io_writer_t* builder, bool* op
 sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   sp_ps_output_t result = sp_zero;
 
+  sp_ps_close_owned_fd(&ps->io.in.fd, ps->io.in.mode);
+
   bool out_open = sp_ps_is_fd_valid(ps->io.out.fd);
   bool err_open = sp_ps_is_fd_valid(ps->io.err.fd);
 
@@ -12399,6 +12443,9 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
     }
   }
 
+  sp_ps_close_owned_fd(&ps->io.out.fd, ps->io.out.mode);
+  sp_ps_close_owned_fd(&ps->io.err.fd, ps->io.err.mode);
+
   if (ps->os->pid) {
     CloseHandle(ps->os->pid);
     ps->os->pid = SP_NULLPTR;
@@ -12429,7 +12476,13 @@ bool sp_ps_kill(sp_ps_t* ps) {
 }
 
 void sp_ps_free(sp_ps_t* ps) {
-  if (!ps || !ps->os) return;
+  if (!ps) return;
+
+  sp_ps_close_owned_fd(&ps->io.in.fd, ps->io.in.mode);
+  sp_ps_close_owned_fd(&ps->io.out.fd, ps->io.out.mode);
+  sp_ps_close_owned_fd(&ps->io.err.fd, ps->io.err.mode);
+
+  if (!ps->os) return;
   if (ps->os->pid) {
     CloseHandle(ps->os->pid);
     ps->os->pid = SP_NULLPTR;
