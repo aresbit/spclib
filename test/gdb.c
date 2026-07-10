@@ -50,12 +50,16 @@ static bool gdb_available(void) {
   static s32 cached = -1;
   if (cached < 0) {
     sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-    sp_ps_output_t probe = sp_ps_run_c(scratch.mem, (sp_ps_config_cstr_t) {
-      .command = "gdb",
-      .args = { "-nx", "-batch", "-ex", "python 1" },
-      .io = { .err = { .mode = SP_PS_IO_MODE_NULL } },
-    });
-    cached = (probe.status.exit_code == 0) && sp_fs_exists(gdb_fixture_path(scratch.mem));
+    sp_str_t fixture = gdb_fixture_path(scratch.mem);
+    cached = 0;
+    if (sp_fs_exists(fixture)) {
+      sp_ps_output_t probe = sp_ps_run_c(scratch.mem, (sp_ps_config_cstr_t) {
+        .command = "gdb",
+        .args = { "-q", "-nx", "-batch", "-ex", "python 1", "-ex", "run", sp_str_to_cstr(scratch.mem, fixture) },
+        .io = { .err = { .mode = SP_PS_IO_MODE_NULL } },
+      });
+      cached = probe.status.exit_code == 0;
+    }
     sp_mem_end_scratch(scratch);
   }
   return cached != 0;
