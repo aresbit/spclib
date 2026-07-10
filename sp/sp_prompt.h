@@ -1685,7 +1685,7 @@ static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
       sp_prompt_render_line(ctx, sp_str(line->text.data + span.start, span.len), span.style);
       cursor = span.start + span.len;
     }
-    sp_prompt_render_line(ctx, sp_str(line->text.data + cursor, line->text.len - cursor), sp_zero_s(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_sub(line->text, cursor, line->text.len - cursor), sp_zero_s(sp_prompt_style_t));
 
     sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, ' ', width - line_width), sp_zero_s(sp_prompt_style_t));
     sp_prompt_render_line(ctx, sp_str_lit("│"), sp_zero_s(sp_prompt_style_t));
